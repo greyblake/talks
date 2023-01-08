@@ -78,16 +78,6 @@ Fuzzy VS Arbitrary
 
 ---
 
-# Інструментарій в екосистемі Rust
-
-<v-clicks>
-
-* quickcheck
-* proptest
-* arbitrary (used also fuzzing)
-
-</v-clicks>
-
 <!--
 * Quickcheck and Proptest inspired by Haskell's Quickcheck
   * Мають багато макросів
@@ -290,6 +280,39 @@ fn test_vehicle_record_mapping() {
 Треба мати на увазі, що складність тестів буде рости експоненціально з більшими структурами.
 -->
 
+
+----
+
+```rust{all|1|9-19|21-25}
+let vehicles = [
+    Vehicle {
+        id: VehicleId(123),
+        vehicle_type: VehicleType::Car {
+            fuel: Fuel::Electricity,
+            max_speed_kph: None,
+        }
+    },
+    Vehicle {
+        id: VehicleId(124),
+        vehicle_type: VehicleType::Car {
+            fuel: Fuel::Diesel,
+            max_speed_kph: Some(260),
+        }
+    },
+    Vehicle {
+        id: VehicleId(125),
+        vehicle_type: VehicleType::Bicycle,
+    },
+]
+for vehicle in vehicles.into_iter() {
+    let record = vehicle_to_record(vehicle.clone());
+    let same_vehicle = record_to_vehicle(record);
+    assert_eq!(vehicle, same_vehicle);
+}
+```
+
+
+
 ---
 layout: new-section
 ---
@@ -306,10 +329,213 @@ layout: new-section
 
 ---
 
+## Що таке **property-based testing**?
+
+<v-clicks>
+
+**Property-based tests** перевіряють, що предмет тестування має певну властивість (property).
 
 
 
-## Arbitrary trait
+Наприклад:
+
+</v-clicks>
+
+
+---
+
+## Що таке **property-based testing**?
+
+
+**Property-based tests** перевіряють, що предмет тестування має певну властивість (property).
+
+
+Наприклад:
+
+
+* `vehicle_to_record(vehicle: Vehicle)` never panics
+
+<v-clicks>
+
+* `vehicle = record_to_vehicle(vehicle_to_record(vehicle))`
+
+</v-clicks>
+
+---
+
+<div class="grid grid-cols-2 gap-4">
+
+<div>
+
+### The old test
+
+```rust{all|15-17}
+#[test]
+fn test_vehicle_record_mapping() {
+    let vehicles = [
+        Vehicle {
+            id: VehicleId(123),
+            vehicle_type: VehicleType::Car {
+                fuel: Fuel::Electricity,
+                max_speed_kph: None,
+            }
+        },
+        Vehicle { ... },
+        Vehicle { ... },
+    ]
+    for vehicle in vehicles.into_iter() {
+        let record = vehicle_to_record(vehicle.clone());
+        let same_vehicle = record_to_vehicle(record);
+        assert_eq!(vehicle, same_vehicle);
+    }
+}
+```
+</div>
+
+<div>
+
+### Prop-based test
+
+```rust {all|5-7|3,9|4}
+#[test]
+fn test_vehicle_record_mapping() {
+    arbtest::builder().run(|u| {
+        let vehicle = Vehicle::arbitrary(u)?;
+        let record = vehicle_to_record(vehicle.clone());
+        let same_vehicle = record_to_vehicle(record);
+        assert_eq!(vehicle, same_vehicle);
+        Ok(())
+    })
+}
+```
+
+</div>
+</div>
+
+
+
+---
+
+## The test results
+
+```rust {all|10|5}
+failures:
+
+---- test_vehicle_record_mapping stdout ----
+thread 'test_vehicle_record_mapping' panicked at 'called `Result::unwrap()`
+    on an `Err` value: TryFromIntError(())', src/main.rs:49:60
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+arb_test failed!
+    Seed: 0x25dc50a20000003e
+```
+
+
+<v-clicks>
+
+```rust {6}
+// fn vehicle_to_record
+    VehicleType::Car { fuel, max_speed_kph } => {
+        (
+            "Car".to_owned(),
+            Some(fuel_to_str(fuel).to_owned()),
+            max_speed_kph.map(|speed| speed.try_into().unwrap() )
+        )
+    }
+```
+
+</v-clicks>
+
+---
+
+
+## Reproduce the failure
+
+```rust {all|10|4}
+fn test_vehicle_record_mapping() {
+    fn prop(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<()> {
+        let vehicle = Vehicle::arbitrary(u)?;
+        dbg!(&vehicle);
+        let record = vehicle_to_record(vehicle.clone());
+        let same_vehicle = record_to_vehicle(record);
+        assert_eq!(vehicle, same_vehicle);
+        Ok(())
+    }
+    arbtest::builder().seed(0x25dc50a20000003e).run(prop);
+}
+```
+
+<v-clicks>
+Output:
+```rust {all|5}
+&vehicle = Vehicle {
+    id: VehicleId(1455468422),
+    vehicle_type: Car {
+        fuel: Diesel,
+        max_speed_kph: Some(2207965846),  // too big for i32
+    },
+}
+```
+</v-clicks>
+
+
+---
+
+## Fix
+
+
+```rust{1,5}
+struct VehicleRecord {
+    id: i32,
+    kind: String,
+    fuel: Option<String>,
+    max_speed_kph: Option<i32>,
+}
+```
+
+<div class="grid grid-cols-2 gap-4">
+<v-clicks>
+<div>
+Before:
+```rust{1,5}
+#[derive(Debug, PartialEq, Clone, Arbitrary)]
+enum VehicleType {
+    Car {
+        fuel: Fuel,
+        max_speed_kph: Option<u32>,
+    },
+    Bicycle,
+}
+```
+</div>
+<div>
+After:
+```rust{1,5}
+#[derive(Debug, PartialEq, Clone, Arbitrary)]
+enum VehicleType {
+    Car {
+        fuel: Fuel,
+        max_speed_kph: Option<u16>,
+    },
+    Bicycle,
+}
+```
+</div>
+</v-clicks>
+</div>
+
+
+
+---
+layout: new-section
+---
+
+# Як це працює?
+
+---
+
+### Arbitrary trait
 
 ```rust {all|2}
 pub trait Arbitrary<'a>: Sized {
@@ -430,191 +656,88 @@ Output
 
 
 
----
 
 
-## Rewrite the test to use Arbitrary and arbtest
-
-```rust {all|10|3-9|4-7}
-#[test]
-fn test_vehicle_record_mapping() {
-    fn prop(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<()> {
-        let vehicle = Vehicle::arbitrary(u)?;
-        let record = vehicle_to_record(vehicle.clone());
-        let same_vehicle = record_to_vehicle(record);
-        assert_eq!(vehicle, same_vehicle);
-        Ok(())
-    }
-    arbtest::builder().run(prop);
-}
-```
 
 ---
 
-## The test results
 
-```rust {all|10|5}
-failures:
-
----- test_vehicle_record_mapping stdout ----
-thread 'test_vehicle_record_mapping' panicked at 'called `Result::unwrap()`
-    on an `Err` value: TryFromIntError(())', src/main.rs:49:60
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
-
-arb_test failed!
-    Seed: 0x25dc50a20000003e
-```
-
+## Існуючий інструментарій
 
 <v-clicks>
 
-```rust {6}
-// fn vehicle_to_record
-    VehicleType::Car { fuel, max_speed_kph } => {
-        (
-            "Car".to_owned(),
-            Some(fuel_to_str(fuel).to_owned()),
-            max_speed_kph.map(|speed| speed.try_into().unwrap() )
-        )
-    }
-```
+* Quickcheck
+* Proptest
+* Arbitrary & arbtest
 
-</v-clicks>
-
----
-
-
-## Reproduce the failure
-
-```rust {all|10|4}
-fn test_vehicle_record_mapping() {
-    fn prop(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<()> {
-        let vehicle = Vehicle::arbitrary(u)?;
-        dbg!(&vehicle);
-        let record = vehicle_to_record(vehicle.clone());
-        let same_vehicle = record_to_vehicle(record);
-        assert_eq!(vehicle, same_vehicle);
-        Ok(())
-    }
-    arbtest::builder().seed(0x25dc50a20000003e).run(prop);
-}
-```
-
-<v-clicks>
-Output:
-```rust {all|5}
-&vehicle = Vehicle {
-    id: VehicleId(1455468422),
-    vehicle_type: Car {
-        fuel: Diesel,
-        max_speed_kph: Some(2207965846),  // too big for i32
-    },
-}
-```
 </v-clicks>
 
 
 ---
 
-## Fix
+## Порівняння
 
-
-```rust{1,5}
-struct VehicleRecord {
-    id: i32,
-    kind: String,
-    fuel: Option<String>,
-    max_speed_kph: Option<i32>,
-}
-```
-
-<div class="grid grid-cols-2 gap-4">
-<v-clicks>
-<div>
-Before:
-```rust{1,5}
-#[derive(Debug, PartialEq, Clone, Arbitrary)]
-enum VehicleType {
-    Car {
-        fuel: Fuel,
-        max_speed_kph: Option<u32>,
-    },
-    Bicycle,
-}
-```
-</div>
-<div>
-After:
-```rust{1,5}
-#[derive(Debug, PartialEq, Clone, Arbitrary)]
-enum VehicleType {
-    Car {
-        fuel: Fuel,
-        max_speed_kph: Option<u16>,
-    },
-    Bicycle,
-}
-```
-</div>
-</v-clicks>
-</div>
+|                        | **Quickcheck** | **Proptest** | **Arbitrary** |
+|------------------------|----------------|--------------|---------------|
+| **prop-based testing** | Yes            | Yes          | Yes           |
 
 ---
 
+## Порівняння
 
-# Workarounds
+|                        | **Quickcheck** | **Proptest** | **Arbitrary** |
+|------------------------|----------------|--------------|---------------|
+| **prop-based testing** | Yes            | Yes          | Yes           |
+| **fuzzy testing**      | No             | No           | Yes           |
 
-Що робити, якщо типи зі сторонньої бібліотеки не мають реалізації `Arbitrary`?
+---
 
-<v-clicks>
+## Порівняння
 
-* Newtype паттерн
-* Кастомні функції для певних атрибутів
-</v-clicks>
-
-<v-clicks>
-```rust {all|4|7|6-7,11-14}
-use arbitrary::{Arbitrary, Unstructured};
-use uuid::Uuid;
-
-#[derive(Arbitrary)]
-struct Person {
-    #[arbitrary(with = arbitrary_uuid)] // available since Arbitrary 1.2.0
-    id: Uuid,
-    name: String,
-}
-
-fn arbitrary_uuid(u: &mut Unstructured<'_>) -> arbitrary::Result<Uuid> {
-    let bytes: [u8; 16] = u.bytes(16)?.try_into().map_err(|_| arbitrary::Error::NotEnoughData)?;
-    Uuid::from_bytes(&bytes).map_err(|_| arbitrary::Error::IncorrectFormat)
-}
-```
-</v-clicks>
+|                        | **Quickcheck** | **Proptest** | **Arbitrary** |
+|------------------------|----------------|--------------|---------------|
+| **prop-based testing** | Yes            | Yes          | Yes           |
+| **fuzzy testing**      | No             | No           | Yes           |
+| **derive macro**       | No             | Yes          | Yes           |
 
 
 ---
 
-# Workarounds - arbitrary_ext
+## Порівняння
+
+|                        | **Quickcheck** | **Proptest** | **Arbitrary** |
+|------------------------|----------------|--------------|---------------|
+| **prop-based testing** | Yes            | Yes          | Yes           |
+| **fuzzy testing**      | No             | No           | Yes           |
+| **derive macro**       | No             | Yes          | Yes           |
+| **shrinking**          | Yes            | Yes          | No            |
 
 
-```rust {all|8|7-8,2}
-use arbitrary::{Arbitrary, Unstructured};
-use arbitrary_ext::arbitrary_option;
-use uuid::Uuid;
+---
 
-#[derive(Arbitrary)]
-struct Person {
-    #[arbitrary(with = arbitrary_option(arbitrary_uuid))]
-    id: Option<Uuid>,
-    name: String,
-}
+## Порівняння
 
-fn arbitrary_uuid(u: &mut Unstructured<'_>) -> arbitrary::Result<Uuid> {
-    let bytes: [u8; 16] = u.bytes(16)?.try_into().map_err(|_| arbitrary::Error::NotEnoughData)?;
-    Uuid::from_bytes(&bytes).map_err(|_| arbitrary::Error::IncorrectFormat)
-}
-```
+|                                   | **Quickcheck** | **Proptest** | **Arbitrary** |
+|-----------------------------------|----------------|--------------|---------------|
+| **prop-based testing**            | Yes            | Yes          | Yes           |
+| **fuzzy testing**                 | No             | No           | Yes           |
+| **derive macro**                  | No             | Yes          | Yes           |
+| **shrinking**                     | Yes            | Yes          | No            |
+| **integration with other crates** | No             | No           | Yes           |
+
+
+---
+
+## Порівняння
+
+|                                   | **Quickcheck** | **Proptest** | **Arbitrary** |
+|-----------------------------------|----------------|--------------|---------------|
+| **prop-based testing**            | Yes            | Yes          | Yes           |
+| **fuzzy testing**                 | No             | No           | Yes           |
+| **derive macro**                  | No             | Yes          | Yes           |
+| **shrinking**                     | Yes            | Yes          | No            |
+| **integration with other crates** | No             | No           | Yes           |
+| **multi strategies**              | No             | Yes          | No            |
 
 
 ---
@@ -637,28 +760,13 @@ fn arbitrary_uuid(u: &mut Unstructured<'_>) -> arbitrary::Result<Uuid> {
 
 ---
 
-# На що звернути увагу:
+# Можливі недоліки:
 
 <v-clicks>
 
+* Недетерменовані тести можуть інколи ломати CI
+* Не є 100% заміною юніт тестам
 * Не вся екосистема ще добре інтегрується з Arbitrary
-* Недетерменовані тести можуть інколи валити CI
-* Не завжди є повноцінною заміною звичайним тестам
-
-</v-clicks>
-
-<v-clicks>
-
-```rust
-proptest! {
-    #[test]
-    fn i64_abs_is_never_negative(a: i64) {
-        // This actually fails if a == i64::MIN, but randomly picking one
-        // specific value out of 2⁶⁴ is overwhelmingly unlikely.
-        assert!(a.abs() >= 0);
-    }
-}
-```
 
 </v-clicks>
 
