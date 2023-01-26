@@ -28,6 +28,13 @@ by Serhii Potapov
 
 <!--
 The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)fdsf
+
+
+Всім доброго вечеора,
+сьогодні я буду розповідати про property-based testing в Rust з
+використанням бібліотека Arbitrary та arbtest.
+Також ми розглянемо один практичний use-case, де property-based testing
+може бути досить корисним.
 -->
 
 
@@ -59,35 +66,6 @@ presenterImage: 'https://www.greyblake.com/greyblake.jpeg'
 
 ---
 
-# Як працює Property-Based Testing?
-
-<v-clicks>
-
-* Generate a random input
-* Feed it to the software (function, whatever)
-* Verify software behaviour is correct
-* Repeat until failure is detected or time is up
-
-</v-clicks>
-
-<!--
-* Спроба зломати програму брутфорсом
-
-Fuzzy VS Arbitrary
--->
-
----
-
-<!--
-* Quickcheck and Proptest inspired by Haskell's Quickcheck
-  * Мають багато макросів
-  * Підтримають shrinking
-* Arbitrary використовується для fuzzing, але можна використовувати і для property-based testing завдяки arbtest.
-
-# Дати більше тези, чому арбітрарі
--->
-
----
 
 ## Practical problem
 
@@ -263,7 +241,7 @@ fn test_vehicle_record_mapping() {
 
 <v-clicks>
 
-* Написаний людиною (biased)
+* The test is biased
 * Не покриває багато інших можливих випадків, наприклад:
   * `fuel` is `Diesel`
   * `max_speed_kph` is present
@@ -283,7 +261,7 @@ fn test_vehicle_record_mapping() {
 
 ----
 
-```rust{all|1|9-19|21-25}
+```rust{all|1-20|21-25}
 let vehicles = [
     Vehicle {
         id: VehicleId(123),
@@ -353,23 +331,22 @@ layout: new-section
 Наприклад:
 
 
-* `vehicle_to_record(vehicle: Vehicle)` never panics
+* `vehicle_to_record(vehicle: Vehicle) -> VehicleRecord` never panics
 
 <v-clicks>
 
-* `vehicle = record_to_vehicle(vehicle_to_record(vehicle))`
+* `record_to_vehicle(vehicle_to_record(vehicle)) = vehicle`
 
 </v-clicks>
 
 ---
 
 <div class="grid grid-cols-2 gap-4">
-
 <div>
 
 ### The old test
 
-```rust{all|15-17}
+```rust
 #[test]
 fn test_vehicle_record_mapping() {
     let vehicles = [
@@ -380,6 +357,42 @@ fn test_vehicle_record_mapping() {
                 max_speed_kph: None,
             }
         },
+        // full definition is hidden to save
+        // some space on the slide
+        Vehicle { ... },
+        Vehicle { ... },
+    ]
+    for vehicle in vehicles.into_iter() {
+        let record = vehicle_to_record(vehicle.clone());
+        let same_vehicle = record_to_vehicle(record);
+        assert_eq!(vehicle, same_vehicle);
+    }
+}
+```
+</div>
+</div>
+
+---
+
+<div class="grid grid-cols-2 gap-4">
+
+<div>
+
+### The old test
+
+```rust{all|17-19}
+#[test]
+fn test_vehicle_record_mapping() {
+    let vehicles = [
+        Vehicle {
+            id: VehicleId(123),
+            vehicle_type: VehicleType::Car {
+                fuel: Fuel::Electricity,
+                max_speed_kph: None,
+            }
+        },
+        // full definition is hidden to save
+        // some space on the slide
         Vehicle { ... },
         Vehicle { ... },
     ]
@@ -452,17 +465,16 @@ arb_test failed!
 
 ## Reproduce the failure
 
-```rust {all|10|4}
+```rust {all|2|4}
 fn test_vehicle_record_mapping() {
-    fn prop(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<()> {
+    arbtest::builder().seed(0x25dc50a20000003e).run(|u| {
         let vehicle = Vehicle::arbitrary(u)?;
         dbg!(&vehicle);
         let record = vehicle_to_record(vehicle.clone());
         let same_vehicle = record_to_vehicle(record);
         assert_eq!(vehicle, same_vehicle);
         Ok(())
-    }
-    arbtest::builder().seed(0x25dc50a20000003e).run(prop);
+    })
 }
 ```
 
@@ -531,7 +543,7 @@ enum VehicleType {
 layout: new-section
 ---
 
-# Як це працює?
+# Як працює Arbitrary та arbtest?
 
 ---
 
@@ -679,7 +691,7 @@ Output
 
 |                        | **Quickcheck** | **Proptest** | **Arbitrary** |
 |------------------------|----------------|--------------|---------------|
-| **prop-based testing** | Yes            | Yes          | Yes           |
+| **prop-based testing** | ✔️              | ✔️            | ✔️             |
 
 ---
 
@@ -687,8 +699,8 @@ Output
 
 |                        | **Quickcheck** | **Proptest** | **Arbitrary** |
 |------------------------|----------------|--------------|---------------|
-| **prop-based testing** | Yes            | Yes          | Yes           |
-| **fuzzy testing**      | No             | No           | Yes           |
+| **prop-based testing** | ✔️              | ✔️            | ✔️             |
+| **fuzzy testing**      |                |              | ✔️             |
 
 ---
 
@@ -696,9 +708,9 @@ Output
 
 |                        | **Quickcheck** | **Proptest** | **Arbitrary** |
 |------------------------|----------------|--------------|---------------|
-| **prop-based testing** | Yes            | Yes          | Yes           |
-| **fuzzy testing**      | No             | No           | Yes           |
-| **derive macro**       | No             | Yes          | Yes           |
+| **prop-based testing** | ✔️              | ✔️            | ✔️             |
+| **fuzzy testing**      |                |              | ✔️             |
+| **derive macro**       |                | ✔️            | ✔️             |
 
 
 ---
@@ -707,10 +719,10 @@ Output
 
 |                        | **Quickcheck** | **Proptest** | **Arbitrary** |
 |------------------------|----------------|--------------|---------------|
-| **prop-based testing** | Yes            | Yes          | Yes           |
-| **fuzzy testing**      | No             | No           | Yes           |
-| **derive macro**       | No             | Yes          | Yes           |
-| **shrinking**          | Yes            | Yes          | No            |
+| **prop-based testing** | ✔️              | ✔️            | ✔️             |
+| **fuzzy testing**      |                |              | ✔️             |
+| **derive macro**       |                | ✔️            | ✔️             |
+| **shrinking**          | ✔️              | ✔️            |               |
 
 
 ---
@@ -719,11 +731,11 @@ Output
 
 |                                   | **Quickcheck** | **Proptest** | **Arbitrary** |
 |-----------------------------------|----------------|--------------|---------------|
-| **prop-based testing**            | Yes            | Yes          | Yes           |
-| **fuzzy testing**                 | No             | No           | Yes           |
-| **derive macro**                  | No             | Yes          | Yes           |
-| **shrinking**                     | Yes            | Yes          | No            |
-| **integration with other crates** | No             | No           | Yes           |
+| **prop-based testing**            | ✔️              | ✔️            | ✔️             |
+| **fuzzy testing**                 |                |              | ✔️             |
+| **derive macro**                  |                | ✔️            | ✔️             |
+| **shrinking**                     | ✔️              | ✔️            |               |
+| **integration with other crates** |                |              | ✔️             |
 
 
 ---
@@ -732,12 +744,12 @@ Output
 
 |                                   | **Quickcheck** | **Proptest** | **Arbitrary** |
 |-----------------------------------|----------------|--------------|---------------|
-| **prop-based testing**            | Yes            | Yes          | Yes           |
-| **fuzzy testing**                 | No             | No           | Yes           |
-| **derive macro**                  | No             | Yes          | Yes           |
-| **shrinking**                     | Yes            | Yes          | No            |
-| **integration with other crates** | No             | No           | Yes           |
-| **multi strategies**              | No             | Yes          | No            |
+| **prop-based testing**            | ✔️              | ✔️            | ✔️             |
+| **fuzzy testing**                 |                |              | ✔️             |
+| **derive macro**                  |                | ✔️            | ✔️             |
+| **shrinking**                     | ✔️              | ✔️            |               |
+| **integration with other crates** |                |              | ✔️             |
+| **multi strategies**              |                | ✔️            |               |
 
 
 ---
@@ -752,7 +764,7 @@ Output
 * Дуже добре підходить для тестування:
   * Небажаних panics
   * Cиметричного перетворення даних
-* Не потребує багато коду (high value/effort ratio)
+* Не потребує багато зусиль
 
 </v-clicks>
 
@@ -764,9 +776,8 @@ Output
 
 <v-clicks>
 
-* Недетерменовані тести можуть інколи ломати CI
 * Не є 100% заміною юніт тестам
-* Не вся екосистема ще добре інтегрується з Arbitrary
+* Недетерменовані тести можуть інколи ломати CI
 
 </v-clicks>
 
