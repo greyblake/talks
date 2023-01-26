@@ -341,6 +341,21 @@ layout: new-section
 
 ---
 
+
+## Як працює **property-based testing**?
+
+<v-clicks>
+
+* Generate a random input
+* Feed it to the software (function, whatever)
+* Verify software behaviour is correct
+* Repeat until a failure is detected or time is up
+
+</v-clicks>
+
+
+---
+
 <div class="grid grid-cols-2 gap-4">
 <div>
 
@@ -762,7 +777,7 @@ Output
 
 * Not biased test input
 * Дуже добре підходить для тестування:
-  * Небажаних panics
+  * Небажаних panics (e.g. is often used for parsing libraries)
   * Cиметричного перетворення даних
 * Не потребує багато зусиль
 
@@ -777,7 +792,7 @@ Output
 <v-clicks>
 
 * Не є 100% заміною юніт тестам
-* Недетерменовані тести можуть інколи ломати CI
+* Недетерменовані тести можуть інколи ломати CI (але це скоріше добре, бо знайдена помилка, про яку раніше не знали!).
 
 </v-clicks>
 
