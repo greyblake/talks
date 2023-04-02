@@ -298,7 +298,7 @@ layout: new-section
 # Property-based testing to rescue!
 
 <center>
-<img src="https://gifimage.net/wp-content/uploads/2017/08/hooray-gif-12.gif" width="500" />
+<img src="img/Minion02.gif" width="500" />
 </center>
 
 
