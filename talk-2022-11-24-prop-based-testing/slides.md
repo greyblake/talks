@@ -54,11 +54,9 @@ presenterImage: 'https://www.greyblake.com/greyblake.jpeg'
 
 * ⚓ Berlin/Kharkiv
 * 🧔 Doing web development since 2008
-* 🧑‍💻 Open Source enthusiast:
-  * <a href="https://whatlang.org">whatlang.org</a> (used by Sonic, Meilisearch)
-  * ta
-  * envconfig
+* 🧑‍💻 Open Source (whatlang, nutype, ta, envconfig)
 * 📝 Blog: <a href="https://greyblake.com">greyblake.com</a>
+* <img src="/img/rustcast.png" width="32" style="display: inline-block"/> RustCast (youtube channel)
 * 🌐 Github, Twitter, etc: <a href="https://twitter.com/greyblake">@greyblake</a>
 * <img src="https://upload.wikimedia.org/wikipedia/commons/f/f5/Flag_of_Esperanto.svg" width="32" style="display: inline-block"/> I speak Esperanto
 
@@ -500,7 +498,7 @@ Output:
     id: VehicleId(1455468422),
     vehicle_type: Car {
         fuel: Diesel,
-        max_speed_kph: Some(2207965846),  // too big for i32
+        max_speed_kph: Some(2207965846),  // fits in u32, but too big for i32
     },
 }
 ```
@@ -525,7 +523,7 @@ struct VehicleRecord {
 <v-clicks>
 <div>
 Before:
-```rust{1,5}
+```rust{2,5}
 #[derive(Debug, PartialEq, Clone, Arbitrary)]
 enum VehicleType {
     Car {
@@ -538,7 +536,7 @@ enum VehicleType {
 </div>
 <div>
 After:
-```rust{1,5}
+```rust{2,5}
 #[derive(Debug, PartialEq, Clone, Arbitrary)]
 enum VehicleType {
     Car {
@@ -551,6 +549,8 @@ enum VehicleType {
 </div>
 </v-clicks>
 </div>
+
+Any `u16` f
 
 
 
